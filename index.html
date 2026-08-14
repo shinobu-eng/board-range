@@ -976,6 +976,12 @@ document.getElementById("clearEditBtn").onclick=()=>{rangeEdit={};render()};
 document.getElementById("heroBtn").onclick=()=>{
   heroSeat=SEATSf()[(SEATSf().indexOf(heroSeat)+1)%tableSize];render()};
 document.getElementById("out").addEventListener("click",ev=>{const c=ev.target.closest(".c");if(c&&c.dataset.h){if(editMode)toggleEdit(c.dataset.h,c.dataset.seat);else{document.querySelectorAll("#out .c.csel").forEach(function(x){x.classList.remove("csel")});c.classList.add("csel");cellTap(c.dataset.h,c.dataset.seat);}}});
+/* ディープリンク: ?board=AhKd7c で 6max100bb BTN-BB SRP のそのフロップを開く(1755網羅にヒット) */
+(function(){try{
+  var b=new URLSearchParams(location.search).get("board");
+  if(b){var cs=[];for(var i=0;i+1<b.length;i+=2){var r=RK.indexOf(b[i].toUpperCase());var s="shdc".indexOf(b[i+1].toLowerCase());if(r>=0&&s>=0)cs.push(r*4+s);}
+    if(cs.length>=3){tableSize=6;stackDepth=100;heroSeat="BB";history=[{seat:"BTN",a:"raise",size:2.5},{seat:"BB",a:"call"}];board=cs.slice(0,5);jump=null;rangeEdit={};}}
+}catch(e){}})();
 render();
 </script>
 </body>

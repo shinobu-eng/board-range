@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.20 — 全1755フロップ網羅(6max100bb BTN-BB)</title>
+<title>board-range v5.21 — プリフロ表示バグ修正</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.20 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.21 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -693,11 +693,11 @@ function legal(st,actor){
 }
 
 /* ═════ solve ═════ */
-function solve(st){
+function solve(st, actor){
   const res=[];
   st.alive.forEach(seat=>{
     const p=st.P[seat]; let rng=p.range;
-    if(!rng && board.length===0 && (seat===heroSeat||seat===st.next)){ /* プリフロ: 手番席。GTO situationがあればプレイ範囲(fold以外)を色分けレンジに、無ければRFI */
+    if(!rng && st.street===0 && seat===actor){ /* プリフロのベッティング中のみ・現在の手番(カーソル)の席のみ。コール後は街がフロップに進むので出さない(=p.rangeで表示) */
       const pr=(typeof preflopResolve!=="undefined")?preflopResolve(seat):null;
       if(pr){const pl=preflopPlayed(pr);rng=pl.length?pl.join(","):null;}
       if(!rng){const rf=RFI();rng=rf&&rf[seat]?rf[seat]:null;}
@@ -841,6 +841,7 @@ function jumpSpot(key){
 function showPreflop(){tableSize=6;stackDepth=100;board=[];history=[];heroSeat="BTN";jump=null;rangeEdit={};gridMode=false;render();}
 
 function drawOut(st){
+  const actor = (jump && st.P[jump] && !st.P[jump].fold && !st.done) ? jump : st.next;   /* 現在の手番(カーソル)。render()と同基準 */
   const out=document.getElementById("out");
   const det=document.getElementById("detail");
   if(det&&det.parentNode===out&&out.parentNode)out.parentNode.insertBefore(det,out.nextSibling);
@@ -848,7 +849,7 @@ function drawOut(st){
   if(det)det.innerHTML="";
   const tex=document.getElementById("texture");
   tex.textContent = board.length>=3 ? ("ボード分類： "+textureOf(board)) : "";
-  const res=solve(st);
+  const res=solve(st, actor);
   window.__last={res,board:board.slice()};
   if(!res.length){out.innerHTML='<div class="panel"><div class="note">プリフロップのアクションを入れると、生き残った各プレイヤーのレンジが出ます。</div></div>';return;}
   // range vs range エクイティ（生存レンジ＝生存コンボ）
@@ -869,7 +870,7 @@ function drawOut(st){
     let html=`<div class="head"><span class="who">${r.seat}${r.seat===heroSeat?" ★":""}
       <small>${r.range.length>62?r.range.slice(0,60)+"…":r.range}</small></span>
       <span class="keep">${eqStr}<br><b>${keep.toFixed(0)}%</b> 残存 · 全体 ${pct.toFixed(1)}%</span></div><div class="grid">`;
-    const gres=(board.length===0)?((typeof preflopResolve!=="undefined")?preflopResolve(r.seat):null):((typeof gtoResolve!=="undefined")?gtoResolve(r.seat):null);
+    const gres=(st.street===0)?((r.seat===actor&&typeof preflopResolve!=="undefined")?preflopResolve(r.seat):null):((typeof gtoResolve!=="undefined")?gtoResolve(r.seat):null);   /* プリフロ(街0)の決定色は手番の席のみ／コール後は街がフロップに進む=密度表示にして"まだベット前なのにコール色"を防ぐ */
     const gbands=(gres&&gres.pre)?PBAND:ABAND;
     for(let x=0;x<13;x++)for(let y=0;y<13;y++){
       const h=label(x,y);

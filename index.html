@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.28 — ベット受け手(フォールド/コール/レイズ)+turn/riverもヒューリスティック</title>
+<title>board-range v5.29 — SPR(スタック)・役割を見たヒューリスティック(低SPRでOOPは譲る/ドロー抑制)</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.28 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.29 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -338,12 +338,21 @@ function heurStrongDraw(cb){
   if(rs[12]&&rs[0]&&rs[1]&&rs[2])return true;   /* A2345 */
   return false;
 }
-function heurTendency(h){
+/* ctx(任意)={spr,isOOP,isAggr} でスタック(SPR)/役割を反映。ctx無し=高SPR挙動(従来)。
+   検算(4betポットSPR1.57)で判明: 低SPRのOOPコーラーはアグレッサーに譲ってほぼチェック/ドローは含みオッズ薄で撃たない。 */
+function heurTendency(h,ctx){
   if(board.length<3||typeof classify==="undefined")return null;
   var cs=combos(h).filter(function(cb){return !cb.some(function(c){return board.includes(c);});});
   if(!cs.length)return null;
-  var bet=0;
-  cs.forEach(function(cb){var b=classify(cb[0],cb[1],board); if(b<=4||heurStrongDraw(cb))bet++;});   /* 完成手/強ペア(classify 0-4) or 強ドロー(フラドロ/OESD・フロップ/ターン)→ベット寄り */
+  var lowSPR = ctx && ctx.spr!=null && ctx.spr<3;                    /* 3bet/4betの膨れたポット=低SPR */
+  var oopDefer = ctx && ctx.isOOP && !ctx.isAggr && ctx.spr!=null && ctx.spr<3;  /* OOPコーラーはアグレッサーに譲る(4betのBB等) */
+  var vth = lowSPR?2:4;                                              /* 低SPR(膨れポット)=強レンジ相手に弱made handはベットしない→バリュー閾値を厳しく(セット/2ペア/オーバーペアまで) */
+  var bet=0,nut=0;
+  cs.forEach(function(cb){var b=classify(cb[0],cb[1],board);
+    var dr=heurStrongDraw(cb) && !lowSPR;                            /* 低SPR=含みオッズ薄→ドローは自動ベットしない */
+    if(b<=vth||dr)bet++;
+    if(b<=1)nut++;});
+  if(oopDefer)return (nut/cs.length>=0.7)?"mix":"check";             /* ナッツ級のみ稀にリード(mix)、他は全部チェック(相手に譲る) */
   var f=bet/cs.length;
   return f>=0.7?"bet":(f<=0.3?"check":"mix");
 }
@@ -923,8 +932,15 @@ function drawOut(st){
   window.__last.eq=eqRes;
   {const sb=document.getElementById("stkBoard");if(sb)sb.innerHTML=board.length?board.map(function(c){var su=c&3;var cl=su===3?"g":((su===1||su===2)?"r":"");return '<span class="bcs '+cl+'">'+cstr(c)+'</span>';}).join(""):'<span style="color:var(--mute);font-size:13px">プリフロップ</span>';
    const se=document.getElementById("stkEq");if(se){const ks=Object.keys(eqRes.byseat||{});se.textContent=ks.length?("  "+ks.map(s=>s+" "+eqRes.byseat[s].toFixed(0)+"%").join("  ")):"";}}
+  /* ヒューリスティックのSPR/役割コンテキスト(低SPR=3bet/4betポットで挙動を変える) */
+  var _effBehind=Math.min.apply(null,res.map(function(rr){return stackDepth-(st.P[rr.seat]?st.P[rr.seat].committed:0);}));
+  var _spr = st.pot>0 ? _effBehind/st.pot : 99;
+  var _postOrd=(typeof POSTORDf==="function")?POSTORDf().filter(function(s){return st.P[s]&&!st.P[s].fold;}):[];
+  var _oopSeat=_postOrd[0];
+  var _aggrSeat=null;history.forEach(function(hh){if(hh._st===0&&(hh.a==="raise"||hh.a==="bet"||hh.a==="bet2"||hh.a==="allin"))_aggrSeat=hh.seat;});
   res.forEach(r=>{
     const cell={};let tot=0;r.w.forEach(e=>{cell[e.h]=(cell[e.h]||0)+e.wt;tot+=e.wt});
+    const _hctx={spr:_spr,isOOP:(r.seat===_oopSeat),isAggr:(r.seat===_aggrSeat)};
     const keep=r.start?tot/r.start*100:0,pct=tot/1326*100;
     const d=document.createElement("div");d.className="panel";
     const eqv=eqRes.byseat[r.seat];
@@ -949,7 +965,7 @@ function drawOut(st){
           var hf=(typeof heurFaceBet!=="undefined")?heurFaceBet(h):null;
           grad=hf?heurFaceGrad(hf):"#2f9e59";
         }else if(board.length>=3){   // ポストフロップの先手=ベット/チェック(概算・縞)。turn/riverも役の強さで
-          var ht=(typeof heurTendency!=="undefined")?heurTendency(h):null;
+          var ht=(typeof heurTendency!=="undefined")?heurTendency(h,_hctx):null;
           grad=ht?heurGrad(ht):"#2f9e59";
         }else{grad="#2f9e59";}     // プリフロでsolved無し=緑(レンジ密度)
         fill=`<div class="cf" style="width:${w}%;background:${grad}"></div>`;
@@ -965,7 +981,8 @@ function drawOut(st){
       html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+fb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️ベットを受けた側の「役の強さによる粗い方針」（縞＝概算・GTOではない）。強い完成手→レイズ寄り／トップペア・強ドロー→コール／エア→フォールド。</div>';}
     else if(board.length>=3){   // ヒューリスティック凡例(縞・概算・先手/turn/river)
       var hb=Object.keys(HEURC).map(function(k){var c=HEURC[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
-      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+hb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️これはGTOソルバーの解ではなく「役の強さによる粗い方針」（縞模様＝概算）。バリュー+ドロー→ベット寄り／ミドル・エア→チェック寄り。正確な頻度は🗂解ライブラリの盤（solid色）を参照。</div>';}
+      var sprNote=(_spr<3)?(' <b style="color:#c98a3a">低SPR('+_spr.toFixed(1)+')補正ON</b>＝膨れたポット(3bet/4bet)。OOPのコーラーはアグレッサーに譲りチェック多め／ドローは含みオッズ薄で撃たない。'):(' SPR≈'+(_spr>=99?'—':_spr.toFixed(1))+'。');
+      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+hb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️これはGTOソルバーの解ではなく「役の強さによる粗い方針」（縞模様＝概算）。バリュー+ドロー→ベット寄り／ミドル・エア→チェック寄り。'+sprNote+'正確な頻度は🗂解ライブラリの盤（solid色）を参照。</div>';}
     else html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量（緑＝レンジ密度）</div>';
     // 役バケット内訳（roleOf=役正確）。OVERRIDE(焼き込み)があればそれを優先。
     const ovKey=r.range+"@"+canonBoard(board);

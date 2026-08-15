@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.32 — レンジ内相対強さを6段階(ナッツ級/強/バリュー/ブラフキャッチ/弱め/最弱)に細分</title>
+<title>board-range v5.33 — レンジ内相対強さバーに6段階の目盛り(境界線)を追加</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.32 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.33 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -667,8 +667,13 @@ function rangeRankHtml(rk, bd){
   const top=rk.topPct; const tier=rankTier(top); const lab=tier.lab, col=tier.col;
   const src=bd.length>=5?"リバー=ショーダウン強さで厳密":(bd.length===4?"ターン=残り1枚込みのエクイティ順":"フロップ=エクイティ順(MC概算)");
   const markLeft=Math.max(1,Math.min(99,rk.pctBelow)).toFixed(0);   // 左=弱い→右=強い軸での位置(=自分より弱い割合)
+  // 6段階ゾーン(左=弱→右=強)。帯色を境界でスパッと変え、同じ位置に目盛り線(ラベルなし)を置く=どのゾーンかが一目で分かる。
+  // 境界の左からの位置 = 100 - topPct境界[80,55,33,15,5] = 20/45/67/85/95%
+  const zones="linear-gradient(to right,#8091a8 0 20%,#4a7aa8 20% 45%,#5a9ed0 45% 67%,#e8b04a 67% 85%,#e0912e 85% 95%,#cf5b21 95% 100%)";
+  const ticks=[20,45,67,85,95].map(p=>`<div style="position:absolute;left:${p}%;top:0;width:1px;height:10px;background:rgba(255,255,255,.4)"></div>`).join("");
   return `<div class="note" style="margin-top:7px">レンジ内の相対強さ：この手は自分のレンジの<b style="color:${col}">上位 ${top.toFixed(0)}%</b>（${rk.pctBelow.toFixed(0)}%の手より強い）<br><b style="color:${col}">${lab}</b></div>`
-    +`<div style="position:relative;height:10px;margin-top:5px;border-radius:5px;background:linear-gradient(to right,#26384a,#3a5f80,#5a9ed0,#e0912e,#cf5b21)">`
+    +`<div style="position:relative;height:10px;margin-top:5px;border-radius:5px;background:${zones}">`
+    +ticks
     +`<div style="position:absolute;left:${markLeft}%;top:-3px;width:2px;height:16px;background:#fff;box-shadow:0 0 3px #000;border-radius:1px"></div></div>`
     +`<div class="note" style="font-size:9.5px;color:var(--mute);margin-top:2px">← 弱い　自分のレンジ内での位置　強い →　<span style="color:var(--mute)">${src}</span></div>`;
 }

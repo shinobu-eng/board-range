@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.36 — 低SPRのオールイン/コミット注記+絵文字を全機種対応に</title>
+<title>board-range v5.37 — 200bb選択時に「100bb流用」注記</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.36 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.37 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／📁GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -164,7 +164,7 @@ button.t{padding:10px 11px;font-size:13.5px}
   </div>
   <div class="srow">
     <span class="stklab">スタック</span>
-    <button class="t sm" data-bb="20">20</button><button class="t sm" data-bb="30">30</button><button class="t sm" data-bb="40">40</button><button class="t sm" data-bb="60">60</button><button class="t sm" data-bb="100">100</button><button class="t sm" data-bb="200">200</button>
+    <button class="t sm" data-bb="20">20</button><button class="t sm" data-bb="30">30</button><button class="t sm" data-bb="40">40</button><button class="t sm" data-bb="60">60</button><button class="t sm" data-bb="100">100</button><button class="t sm" data-bb="200">200</button><span id="depthNote" style="font-size:9px;color:var(--mute);margin-left:6px"></span>
   </div>
   <div class="srow srow2">
     <span></span>
@@ -933,6 +933,7 @@ function render(){
 function markSel(){
   document.querySelectorAll("[data-ts]").forEach(b=>{if(b.classList)b.classList.toggle("sel",+b.dataset.ts===tableSize);});
   document.querySelectorAll("[data-bb]").forEach(b=>{if(b.classList)b.classList.toggle("sel",+b.dataset.bb===stackDepth);});
+  {var dn=document.getElementById("depthNote");if(dn)dn.textContent=(stackDepth===200?"※200bb=100bbレンジを流用":"");}   /* 200bbは真の200bb Pio解でなく100bbレンジ流用（正直表示） */
   const g=id=>document.getElementById(id);
   const eb=g("editBtn"),pb=g("precBtn");
   if(eb&&eb.classList)eb.classList.toggle("selg",editMode);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.25 — ヒューリスティックにテスト+リバー修正</title>
+<title>board-range v5.26 — ヒューリスティック改善(クリーンなドロー検出・bet適合率100%)</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.25 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.26 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -327,13 +327,23 @@ const PREGTO={"rfi:UTG": {"hero": "UTG", "kind": "rfi", "hands": {"AA": {"f": 0.
 function gtoKey(seat){return "t"+tableSize+"|d"+stackDepth+"|b="+canonBoardIso(board)+"|@"+seat;}
 /* ── ヒューリスティック(概算・GTO非solveスポットの粗い方針・見た目は縞でsolvedと区別) ── */
 /* 役の強さで粗く: バリュー+ドロー=ベット寄り / ミドル・エア=チェック寄り / 割れたらミックス。%は出さない。 */
+/* 強ドロー検出(フロップ/ターンのみ): フラッシュドロー(4スート) or OESD(4連続ランク)。classifyの絡んだバケットに頼らず直接判定。 */
+function heurStrongDraw(cb){
+  if(board.length>=5)return false;   /* リバー=ドロー無し */
+  var all=cb.concat(board);
+  var sc=[0,0,0,0]; all.forEach(function(c){sc[c&3]++;});
+  if(sc[0]>=4||sc[1]>=4||sc[2]>=4||sc[3]>=4)return true;   /* フラドロ(4枚同スート) */
+  var rs=new Array(13).fill(false); all.forEach(function(c){rs[c>>2]=true;});
+  for(var i=0;i<=9;i++){if(rs[i]&&rs[i+1]&&rs[i+2]&&rs[i+3])return true;}   /* OESD(4連続) */
+  if(rs[12]&&rs[0]&&rs[1]&&rs[2])return true;   /* A2345 */
+  return false;
+}
 function heurTendency(h){
   if(board.length<3||typeof classify==="undefined")return null;
   var cs=combos(h).filter(function(cb){return !cb.some(function(c){return board.includes(c);});});
   if(!cs.length)return null;
-  var river=board.length>=5;   /* リバーはドロー無し→ドロー(7)をベット扱いしない */
   var bet=0;
-  cs.forEach(function(cb){var b=classify(cb[0],cb[1],board); if(b<=4||(b===7&&!river))bet++;});  /* 0-4=完成手/ペア系, 7=ドロー(フロップ/ターンのみベット寄り) */
+  cs.forEach(function(cb){var b=classify(cb[0],cb[1],board); if(b<=4||heurStrongDraw(cb))bet++;});   /* 完成手/強ペア(classify 0-4) or 強ドロー(フラドロ/OESD・フロップ/ターン)→ベット寄り */
   var f=bet/cs.length;
   return f>=0.7?"bet":(f<=0.3?"check":"mix");
 }

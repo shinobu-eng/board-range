@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.30 — アクション内訳は手番の席だけ(非手番は密度のみ)</title>
+<title>board-range v5.31 — 手をクリックで「自分のレンジ内の相対強さ(上位何%=バリュー/ブラフ)」表示</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.30 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.31 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -639,6 +639,34 @@ function perComboEquity(hero,vill,bd,K){
     return n?w/n*100:0;
   });
 }
+/* レンジ内の相対強さ: 自分のレンジを「相手レンジへのエクイティ」で順位付けし、クリックした手の位置(上位何%)を返す。
+   リバー=ショーダウン強さ(引くカード無し)で厳密／ターン=残り1枚込み／フロップ=MC概算。ソルバー不要=relative hand strength。 */
+function handRangeRank(heroW, villCombos, bd, h){
+  const hw=heroW.filter(e=>e.wt>0.02);
+  if(!hw.length || !villCombos.length) return null;
+  const K = bd.length>=5?400:(bd.length===4?220:140);
+  const eqs=perComboEquity(hw.map(e=>e.c), villCombos, bd, K);   // hwと並行
+  const hidx=[];for(let i=0;i<hw.length;i++)if(hw[i].h===h)hidx.push(i);
+  if(!hidx.length) return null;
+  let hs=0;hidx.forEach(i=>hs+=eqs[i]);const handEq=hs/hidx.length;
+  let tot=0,below=0;for(let i=0;i<hw.length;i++){tot+=hw[i].wt;if(eqs[i]<handEq-1e-9)below+=hw[i].wt;}
+  const pctBelow=tot?below/tot*100:0;
+  return {topPct:100-pctBelow, pctBelow, handEq};
+}
+function rangeRankHtml(rk, bd){
+  if(!rk) return "";
+  const top=rk.topPct; let lab,col;
+  if(top<=20){lab="レンジ上位＝バリュー(厚く撃てる)";col="#cf5b21";}
+  else if(top<=45){lab="中の上＝薄いバリュー / 強めのブラフキャッチ";col="#e0912e";}
+  else if(top<=70){lab="中の下＝ブラフキャッチ / チェック寄り";col="#5a9ed0";}
+  else{lab="下位＝弱い(ブラフ候補 or 降り)";col="#7f9bb8";}
+  const src=bd.length>=5?"リバー=ショーダウン強さで厳密":(bd.length===4?"ターン=残り1枚込みのエクイティ順":"フロップ=エクイティ順(MC概算)");
+  const markLeft=Math.max(1,Math.min(99,rk.pctBelow)).toFixed(0);   // 左=弱い→右=強い軸での位置(=自分より弱い割合)
+  return `<div class="note" style="margin-top:7px">レンジ内の相対強さ：この手は自分のレンジの<b style="color:${col}">上位 ${top.toFixed(0)}%</b>（${rk.pctBelow.toFixed(0)}%の手より強い）<br><b style="color:${col}">${lab}</b></div>`
+    +`<div style="position:relative;height:10px;margin-top:5px;border-radius:5px;background:linear-gradient(to right,#26384a,#3a5f80,#5a9ed0,#e0912e,#cf5b21)">`
+    +`<div style="position:absolute;left:${markLeft}%;top:-3px;width:2px;height:16px;background:#fff;box-shadow:0 0 3px #000;border-radius:1px"></div></div>`
+    +`<div class="note" style="font-size:9.5px;color:var(--mute);margin-top:2px">← 弱い　自分のレンジ内での位置　強い →　<span style="color:var(--mute)">${src}</span></div>`;
+}
 function drawEquityGraph(){
   const L=window.__last,g=document.getElementById("graph");
   if(!L||!L.res||L.board.length<3){g.innerHTML='<div class="panel"><div class="note">フロップ以降で、生存プレイヤーのエクイティ分布を表示します。</div></div>';return;}
@@ -1028,9 +1056,14 @@ function cellTap(h,seat){
      if(typeof gm==="object"){mix=bset.filter(function(b){return Math.round((gm[b[0]]||0)*100)>0;}).map(function(b){return '<b style="color:'+b[1]+'">'+b[2]+' '+Math.round(gm[b[0]]*100)+'%</b>';}).join(' / ');}
      else{const bet=Math.round(gm*100);mix='<b style="color:#e0912e">ベット '+bet+'%</b> / <b style="color:#4a90c2">チェック '+(100-bet)+'%</b>';}
      gtoTxt=`<div class="note" style="margin-top:6px">GTO・<b style="color:${col}">${tl}</b>（${R.st.method}）：${mix}　<span style="color:var(--mute)">${R.st.conv||("収束 "+R.st.exploitability+"bb")}</span></div>`;}}
+  // レンジ内の相対強さ(上位何%＝バリュー/ブラフキャッチ/弱)。相手の生存レンジへのエクイティで順位付け(ソルバー不要)。
+  let rankTxt="";
+  {const vill=others.flatMap(o=>o.combos);
+   const rk=(vill.length)?handRangeRank(r.w,vill,board,h):null;
+   rankTxt=rangeRankHtml(rk,board);}
   det.innerHTML=`<div class="panel"><div class="who">${seat} — ${h}（${combos.length}コンボ）</div>
     <div class="note" style="margin-top:5px">役：<b>${labs.join(" / ")}</b></div>
-    <div class="note" style="margin-top:4px">${eqTxt}</div>${gtoTxt}</div>`;
+    <div class="note" style="margin-top:4px">${eqTxt}</div>${rankTxt}${gtoTxt}</div>`;
   {const sh=document.getElementById("stkHand");if(sh){const m=eqTxt?eqTxt.match(/([\d.]+%)/):null;sh.innerHTML="<b>"+seat+" "+h+"</b> "+(m?m[1]:"");}}
 }
 

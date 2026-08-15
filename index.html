@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.34 — 相対強さ表示を改善(強さを主役に大きく/アクションは目安として分離)</title>
+<title>board-range v5.35 — 相対強さは呼び名を出さず上位%で表示/勝率ラベルを平易化</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.34 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.35 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -672,9 +672,9 @@ function rangeRankHtml(rk, bd){
   // 境界の左からの位置 = 100 - topPct境界[80,55,33,15,5] = 20/45/67/85/95%
   const zones="linear-gradient(to right,#8091a8 0 20%,#4a7aa8 20% 45%,#5a9ed0 45% 67%,#e8b04a 67% 85%,#e0912e 85% 95%,#cf5b21 95% 100%)";
   const ticks=[20,45,67,85,95].map(p=>`<div style="position:absolute;left:${p}%;top:0;width:1px;height:10px;background:rgba(255,255,255,.4)"></div>`).join("");
-  // 主役=強さ(上位X%＋段階名)を大きく。アクションはイコールで繋がず、バーの下に小さく"目安"として離して置く(断定に見せない)。
+  // 主役=強さの数値(上位X%)を大きく。呼び名ラベル(ナッツ級/強いバリュー等)は入れない(土屋確定)。アクションはイコールで繋がず小さく"目安"で。
   return `<div class="note" style="margin-top:7px">レンジ内の相対強さ</div>`
-    +`<div style="margin-top:2px;font-size:15px;font-weight:800;color:${col}">上位 ${top.toFixed(0)}%　${tier.name}</div>`
+    +`<div style="margin-top:2px;font-size:16px;font-weight:800;color:${col}">上位 ${top.toFixed(0)}%</div>`
     +`<div class="note" style="font-size:10.5px;color:var(--mute);margin-top:1px">（自分のレンジの${rk.pctBelow.toFixed(0)}%の手より強い）</div>`
     +`<div style="position:relative;height:10px;margin-top:6px;border-radius:5px;background:${zones}">`
     +ticks
@@ -684,9 +684,9 @@ function rangeRankHtml(rk, bd){
 }
 function drawEquityGraph(){
   const L=window.__last,g=document.getElementById("graph");
-  if(!L||!L.res||L.board.length<3){g.innerHTML='<div class="panel"><div class="note">フロップ以降で、生存プレイヤーのエクイティ分布を表示します。</div></div>';return;}
+  if(!L||!L.res||L.board.length<3){g.innerHTML='<div class="panel"><div class="note">フロップ以降で、残っているプレイヤーのエクイティ分布を表示します。</div></div>';return;}
   const alive=L.res.map(r=>({seat:r.seat,combos:r.w.filter(e=>e.wt>0.02).map(e=>e.c)})).filter(s=>s.combos.length);
-  if(alive.length<2){g.innerHTML='<div class="panel"><div class="note">2人以上の生存レンジが必要です。</div></div>';return;}
+  if(alive.length<2){g.innerHTML='<div class="panel"><div class="note">2人以上の残りレンジが必要です。</div></div>';return;}
   g.innerHTML='<div class="panel"><div class="note">エクイティ分布を計算中…</div></div>';
   setTimeout(()=>{
     const K=alive.length>2?150:250,colors=["#3fb56b","#e0533c","#f0c14b","#6ab7ff","#c78bff","#ff9e64","#7fd6ab","#d98cff","#8792a3"];
@@ -1062,7 +1062,7 @@ function cellTap(h,seat){
   let eqTxt="";
   if(others.some(o=>o.combos.length)){
     const eq=equityAll([{seat,combos},...others],board);
-    eqTxt=`エクイティ vs 生存レンジ：<b style="color:var(--live)">${(eq.byseat[seat]||0).toFixed(1)}%</b>（${eq.mode}）`;
+    eqTxt=`相手レンジへの勝率（エクイティ）：<b style="color:var(--live)">${(eq.byseat[seat]||0).toFixed(1)}%</b>　<span style="color:var(--mute);font-size:10.5px">＝相手が残せる全ハンド相手にショーダウンまで行った時の平均勝率（${eq.mode}）</span>`;
   }
   let gtoTxt="";
   {const R=(board.length===0)?((typeof preflopResolve!=="undefined")?preflopResolve(seat):null):((typeof gtoResolve!=="undefined")?gtoResolve(seat):null);const gm=R?R.st.hands[h]:undefined;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.27 — ベット後は初手色を出さない(受け手の対応は未sol)</title>
+<title>board-range v5.28 — ベット受け手(フォールド/コール/レイズ)+turn/riverもヒューリスティック</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.27 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.28 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -347,6 +347,23 @@ function heurTendency(h){
   var f=bet/cs.length;
   return f>=0.7?"bet":(f<=0.3?"check":"mix");
 }
+/* ベットを受けた側の粗い方針(概算): レイズ(強)/コール(継続・ブラフキャッチ)/フォールド(降り)。※GTOでなく役の強さの目安 */
+function heurFaceBet(h){
+  if(board.length<3||typeof classify==="undefined")return null;
+  var cs=combos(h).filter(function(cb){return !cb.some(function(c){return board.includes(c);});});
+  if(!cs.length)return null;
+  var raise=0,call=0,fold=0;
+  cs.forEach(function(cb){var b=classify(cb[0],cb[1],board);
+    if(b<=2)raise++;                              /* 強い完成手/セット/2ペア/オーバーペア→レイズ寄り */
+    else if(b<=5||heurStrongDraw(cb))call++;      /* トップペア/2ndペア/強ドロー→コール(継続) */
+    else fold++;});                               /* 下位ペア/弱/エア→フォールド */
+  var n=cs.length;
+  if(raise/n>=0.5)return "raise";
+  if(fold/n>=0.6)return "fold";
+  return "call";
+}
+var FBAND={fold:["#5a6472","#3a3f4a","フォールド"],call:["#3a5f80","#26384a","コール"],raise:["#9a5320","#5a3012","レイズ"]};
+function heurFaceGrad(t){var c=FBAND[t]||FBAND.call;return "repeating-linear-gradient(45deg,"+c[0]+" 0 5px,"+c[1]+" 5px 10px)";}
 var HEURC={bet:["#8a5a2a","#5a3d1e","ベット寄り"],check:["#3a5f80","#26384a","チェック寄り"],mix:["#6a5a7a","#3a3040","ミックス"]};
 function heurGrad(t){var c=HEURC[t]||HEURC.mix;return "repeating-linear-gradient(45deg,"+c[0]+" 0 5px,"+c[1]+" 5px 10px)";}  /* 縞=ヒューリスティック(solidのsolvedと区別) */
 
@@ -917,6 +934,7 @@ function drawOut(st){
       <span class="keep">${eqStr}<br><b>${keep.toFixed(0)}%</b> 残存 · 全体 ${pct.toFixed(1)}%</span></div><div class="grid">`;
     const gres=(st.street===0)?((r.seat===actor&&typeof preflopResolve!=="undefined")?preflopResolve(r.seat):null):((typeof gtoResolve!=="undefined")?gtoResolve(r.seat):null);   /* プリフロ(街0)の決定色は手番の席のみ／コール後は街がフロップに進む=密度表示にして"まだベット前なのにコール色"を防ぐ */
     const gbands=(gres&&gres.pre)?PBAND:ABAND;
+    const faces=board.length>=3 && st.P[r.seat] && (st.bet - st.P[r.seat].inv) > 0.001;   /* この席がベットに直面(受け手)=フォールド/コール/レイズの概算を出す */
     for(let x=0;x<13;x++)for(let y=0;y<13;y++){
       const h=label(x,y);
       const reach=Math.min(1,(cell[h]||0)/nCombo(x,y));   // 残コンボ量=塗りの幅
@@ -927,10 +945,13 @@ function drawOut(st){
         if(gres){
           if(gres.st.hands[h]!=null){grad=bandGrad(gres.st.hands[h],gbands);}   // 色=GTO全アクション分布(色覚安全・多帯/プリフロはPBAND)
           else{grad="#39414d";}   // GTOありだが解レンジ外=中立グレー(緑にしない)
-        }else if(board.length>=3 && !flopBet()){   // solved無し×ポストフロップ(ベット前)=ヒューリスティック(縞・概算)
+        }else if(faces){          // ベットを受けた側=フォールド/コール/レイズ(概算・縞)
+          var hf=(typeof heurFaceBet!=="undefined")?heurFaceBet(h):null;
+          grad=hf?heurFaceGrad(hf):"#2f9e59";
+        }else if(board.length>=3){   // ポストフロップの先手=ベット/チェック(概算・縞)。turn/riverも役の強さで
           var ht=(typeof heurTendency!=="undefined")?heurTendency(h):null;
           grad=ht?heurGrad(ht):"#2f9e59";
-        }else{grad="#2f9e59";}     // プリフロ/ベット後=緑(レンジ密度・受け手の対応は未solve)
+        }else{grad="#2f9e59";}     // プリフロでsolved無し=緑(レンジ密度)
         fill=`<div class="cf" style="width:${w}%;background:${grad}"></div>`;
       }
       html+=`<div class="c" data-h="${h}" data-seat="${r.seat}">${fill}<span class="cl">${h}</span></div>`;
@@ -939,9 +960,10 @@ function drawOut(st){
     if(gres){var bands=gres.pre?PBAND.map(function(b){return '<span><i style="background:'+b[1]+'"></i>'+b[2]+'</span>';}).join(''):(gres.st.rich?ABAND.map(function(b){return '<span><i style="background:'+b[1]+'"></i>'+b[2]+'</span>';}).join(''):'<span><i style="background:#e0912e"></i>ベット</span><span><i style="background:#4a90c2"></i>チェック</span>');
       var srcLbl=gres.pre?'Pio(プリフロップ)':('GTO('+({approx:"近似",standard:"標準",high:"高精度"}[gres.st.tier]||gres.st.tier)+')');
       html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+bands+'<span>'+srcLbl+'</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">前提：'+gres.st.premise+'</div>';}
-    else if(board.length>=3 && flopBet()){   // フロップでベット後=受け手の対応は未solve
-      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量（緑＝レンジ密度）</div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#e0912e">⚠️フロップでベットが入った後の局面です。<b>ベットを受けた側の対応（フォールド/コール/レイズ）は未solve</b>＝ここはレンジ密度のみ表示。初手（チェック/ベット）のGTOは「ベットが入る前」の盤で確認できます（フォールド/コール/レイズの解は今後の拡張）。</div>';}
-    else if(board.length>=3){   // ヒューリスティック凡例(縞・概算・ベット前)
+    else if(faces){   // ベットを受けた側=フォールド/コール/レイズ(概算・縞)
+      var fb=Object.keys(FBAND).map(function(k){var c=FBAND[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
+      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+fb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️ベットを受けた側の「役の強さによる粗い方針」（縞＝概算・GTOではない）。強い完成手→レイズ寄り／トップペア・強ドロー→コール／エア→フォールド。</div>';}
+    else if(board.length>=3){   // ヒューリスティック凡例(縞・概算・先手/turn/river)
       var hb=Object.keys(HEURC).map(function(k){var c=HEURC[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
       html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+hb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️これはGTOソルバーの解ではなく「役の強さによる粗い方針」（縞模様＝概算）。バリュー+ドロー→ベット寄り／ミドル・エア→チェック寄り。正確な頻度は🗂解ライブラリの盤（solid色）を参照。</div>';}
     else html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量（緑＝レンジ密度）</div>';

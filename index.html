@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.31 — 手をクリックで「自分のレンジ内の相対強さ(上位何%=バリュー/ブラフ)」表示</title>
+<title>board-range v5.32 — レンジ内相対強さを6段階(ナッツ級/強/バリュー/ブラフキャッチ/弱め/最弱)に細分</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.31 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.32 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -653,13 +653,18 @@ function handRangeRank(heroW, villCombos, bd, h){
   const pctBelow=tot?below/tot*100:0;
   return {topPct:100-pctBelow, pctBelow, handEq};
 }
+/* レンジ内順位(上位topPct%)→ポーカー意思決定に合う6段階。両端(ナッツ級/最弱)を細かく、中間はブラフキャッチ。色覚安全(橙=強/青=弱)。 */
+function rankTier(top){
+  if(top<=5)  return {lab:"ナッツ級（上位5%）＝最大バリュー / レイズ", col:"#cf5b21"};
+  if(top<=15) return {lab:"強いバリュー（上位15%）＝厚くベット", col:"#e0912e"};
+  if(top<=33) return {lab:"バリュー（薄め含む）＝ベット寄り", col:"#e8b04a"};
+  if(top<=55) return {lab:"ブラフキャッチ上位＝コール寄り", col:"#5a9ed0"};
+  if(top<=80) return {lab:"弱め＝ショーダウン狙い / チェック", col:"#4a7aa8"};
+  return              {lab:"最弱（下位20%）＝ブラフ候補 or 降り", col:"#8091a8"};
+}
 function rangeRankHtml(rk, bd){
   if(!rk) return "";
-  const top=rk.topPct; let lab,col;
-  if(top<=20){lab="レンジ上位＝バリュー(厚く撃てる)";col="#cf5b21";}
-  else if(top<=45){lab="中の上＝薄いバリュー / 強めのブラフキャッチ";col="#e0912e";}
-  else if(top<=70){lab="中の下＝ブラフキャッチ / チェック寄り";col="#5a9ed0";}
-  else{lab="下位＝弱い(ブラフ候補 or 降り)";col="#7f9bb8";}
+  const top=rk.topPct; const tier=rankTier(top); const lab=tier.lab, col=tier.col;
   const src=bd.length>=5?"リバー=ショーダウン強さで厳密":(bd.length===4?"ターン=残り1枚込みのエクイティ順":"フロップ=エクイティ順(MC概算)");
   const markLeft=Math.max(1,Math.min(99,rk.pctBelow)).toFixed(0);   // 左=弱い→右=強い軸での位置(=自分より弱い割合)
   return `<div class="note" style="margin-top:7px">レンジ内の相対強さ：この手は自分のレンジの<b style="color:${col}">上位 ${top.toFixed(0)}%</b>（${rk.pctBelow.toFixed(0)}%の手より強い）<br><b style="color:${col}">${lab}</b></div>`

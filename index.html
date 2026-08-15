@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.39 — クリック時ドロー判定を修正(ガット/OESD正確化・BDFDは手2枚スート時のみ)</title>
+<title>board-range v5.40 — メイドフラッシュ手組みoverride(クリック詳細でフラッシュ完成コンボをバリューベットと別出し・#12までの繋ぎ)</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.39 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.40 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／📁GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -578,6 +578,9 @@ function roleOf(h1,h2,bd){
   else bucket=(draws.length?"ドロー":"ハイカード");
   return {made,label,bucket,draws};
 }
+/* 手組みmade-flush override(#12までの繋ぎ): フラッシュ/ストレートフラッシュを作っているコンボを抽出。
+   solved◎/ヒューリスティックはクラス集計でフラッシュと非フラッシュを混ぜて潰すため、この組だけ別扱いで"バリューベット"と明示する(縞=概算)。fineデータ完成時はスートパターン単位のsolved値へ差し替え。 */
+function madeFlushCombos(cbs,bd){return cbs.filter(function(c){var m=evalHand([c[0],c[1]].concat(bd))[0];return m===5||m===8;});}
 function textureOf(bd){
   if(bd.length<3)return"";
   const rs=bd.map(c=>c>>2),ss=bd.map(c=>c&3);
@@ -1075,6 +1078,14 @@ function cellTap(h,seat){
   if(!combos.length){det.innerHTML=`<div class="panel"><div class="note">${seat}: ${h} はこのレンジ/絞りに残っていません。</div></div>`;return;}
   // 役ラベル（コンボごと。異なればまとめる）
   const labs=[...new Set(combos.map(c=>roleOf(c[0],c[1],board).label))];
+  // 手組みmade-flush override(#12までの繋ぎ): フラッシュ完成コンボを別出しで"バリューベット"と明示(概算)
+  const mfCombos=madeFlushCombos(combos,board);
+  let mfTxt="";
+  if(mfCombos.length){const allF=mfCombos.length===combos.length;
+    mfTxt=`<div class="note" style="margin-top:6px;background:repeating-linear-gradient(45deg,#3a2f10 0 6px,#2a2208 6px 12px);padding:5px 7px;border-radius:4px">`
+      +`🃏 メイドフラッシュ ${mfCombos.length}/${combos.length}コンボ ＝ <b style="color:#e0912e">手組み概算：バリューでベット（大きめ）</b>`
+      +(allF?"":` <span style="color:var(--mute);font-size:10.5px">（残り${combos.length-mfCombos.length}コンボ＝非フラッシュは下のGTO/概算どおり）</span>`)
+      +`<div style="color:var(--mute);font-size:10px;margin-top:2px">※solved◎はクラス集計でフラッシュと非フラッシュを混ぜるため、この組は手組みで別出し（#12で正確化予定）</div></div>`;}
   // このハンド vs 他生存レンジ のエクイティ
   const others=L.res.filter(x=>x.seat!==seat).map(x=>({seat:x.seat,combos:x.w.filter(e=>e.wt>0.02).map(e=>e.c)}));
   let eqTxt="";
@@ -1096,7 +1107,7 @@ function cellTap(h,seat){
    rankTxt=rangeRankHtml(rk,board);}
   det.innerHTML=`<div class="panel"><div class="who">${seat} — ${h}（${combos.length}コンボ）</div>
     <div class="note" style="margin-top:5px">役：<b>${labs.join(" / ")}</b></div>
-    <div class="note" style="margin-top:4px">${eqTxt}</div>${rankTxt}${gtoTxt}</div>`;
+    <div class="note" style="margin-top:4px">${eqTxt}</div>${rankTxt}${gtoTxt}${mfTxt}</div>`;
   {const sh=document.getElementById("stkHand");if(sh){const m=eqTxt?eqTxt.match(/([\d.]+%)/):null;sh.innerHTML="<b>"+seat+" "+h+"</b> "+(m?m[1]:"");}}
 }
 

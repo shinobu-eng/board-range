@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.35 — 相対強さは呼び名を出さず上位%で表示/勝率ラベルを平易化</title>
+<title>board-range v5.36 — 低SPRのオールイン/コミット注記+絵文字を全機種対応に</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,11 +147,11 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.35 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
-<div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
+<h1>board-range v5.36 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<div class="sub">6〜9max・深さ20-200bb／📁GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
-  <summary>🗂 GTO解ライブラリ（計算済みスポット）</summary>
+  <summary>📁 GTO解ライブラリ（計算済みスポット）</summary>
   <div class="sol" id="solList"></div>
   <div class="note" style="font-size:10.5px">タップでそのスポットへ移動（人数・深さ・盤・席を自動設定）。</div>
 </details>
@@ -663,6 +663,17 @@ function rankTier(top){
   if(top<=80) return {name:"弱め", act:"ショーダウン狙い / チェック", col:"#4a7aa8"};
   return              {name:"最弱", act:"ブラフ候補 or 降り", col:"#8091a8"};
 }
+/* 低SPR=ベットしたら後ろが浅く実質オールイン/コミットになる、という幾何の注記。手組みはサイズを分けないのでこれで補う。
+   spr<1.3=ほぼ確実にコミット / 1.3〜3=大きめベットはコミット気味 / それ以上=注記なし。facing=受け手(レイズ/コール)向けの言い回し。 */
+function commitNote(spr, facing){
+  if(spr==null||spr>=3) return "";
+  if(spr<1.3) return facing
+    ? ' <b style="color:#c98a3a">SPR'+spr.toFixed(1)+'＝レイズは実質オールイン・コールもほぼコミット</b>（後ろが浅い）。'
+    : ' <b style="color:#c98a3a">SPR'+spr.toFixed(1)+'＝ベット＝実質オールイン/コミット</b>（後ろが浅い）。';
+  return facing
+    ? ' <span style="color:#c98a3a">SPR'+spr.toFixed(1)+'＝レイズ・大きめコールはコミット気味（オールインが近い）。</span>'
+    : ' <span style="color:#c98a3a">SPR'+spr.toFixed(1)+'＝大きめのベットはほぼコミット（オールインが近い）。</span>';
+}
 function rangeRankHtml(rk, bd){
   if(!rk) return "";
   const top=rk.topPct; const tier=rankTier(top); const col=tier.col;
@@ -1022,11 +1033,12 @@ function drawOut(st){
       html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+bands+'<span>'+srcLbl+'</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">前提：'+gres.st.premise+'</div>';}
     else if(faces){   // ベットを受けた側=フォールド/コール/レイズ(概算・縞)
       var fb=Object.keys(FBAND).map(function(k){var c=FBAND[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
-      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+fb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️ベットを受けた側の「役の強さによる粗い方針」（縞＝概算・GTOではない）。強い完成手→レイズ寄り／トップペア・強ドロー→コール／エア→フォールド。</div>';}
+      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+fb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️ベットを受けた側の「役の強さによる粗い方針」（縞＝概算・GTOではない）。強い完成手→レイズ寄り／トップペア・強ドロー→コール／エア→フォールド。'+commitNote(_spr,true)+'</div>';}
     else if(board.length>=3 && isTurn){   // ヒューリスティック凡例(縞・概算・先手/turn/river・手番の席のみ)
       var hb=Object.keys(HEURC).map(function(k){var c=HEURC[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
+      var commit=commitNote(_spr);   /* 低SPR=ベットしたら後ろが浅い=実質オールイン/コミット(幾何で決まる・手組みはサイズを分けないので注記で補う) */
       var sprNote=(_spr<3)?(' <b style="color:#c98a3a">低SPR('+_spr.toFixed(1)+')補正ON</b>＝膨れたポット(3bet/4bet)。OOPのコーラーはアグレッサーに譲りチェック多め／ドローは含みオッズ薄で撃たない。'):(' SPR≈'+(_spr>=99?'—':_spr.toFixed(1))+'。');
-      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+hb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️これはGTOソルバーの解ではなく「役の強さによる粗い方針」（縞模様＝概算）。バリュー+ドロー→ベット寄り／ミドル・エア→チェック寄り。'+sprNote+'正確な頻度は🗂解ライブラリの盤（solid色）を参照。</div>';}
+      html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+hb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️これはGTOソルバーの解ではなく「役の強さによる粗い方針」（縞模様＝概算）。バリュー+ドロー→ベット寄り／ミドル・エア→チェック寄り。'+sprNote+commit+'正確な頻度は📁解ライブラリの盤（solid色）を参照。</div>';}
     else html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量（緑＝レンジ密度）</div>';
     // 役バケット内訳（roleOf=役正確）。OVERRIDE(焼き込み)があればそれを優先。
     const ovKey=r.range+"@"+canonBoard(board);

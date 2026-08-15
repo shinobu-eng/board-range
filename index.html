@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.29 — SPR(スタック)・役割を見たヒューリスティック(低SPRでOOPは譲る/ドロー抑制)</title>
+<title>board-range v5.30 — アクション内訳は手番の席だけ(非手番は密度のみ)</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.29 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.30 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／🗂GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -948,9 +948,10 @@ function drawOut(st){
     let html=`<div class="head"><span class="who">${r.seat}${r.seat===heroSeat?" ★":""}
       <small>${r.range.length>62?r.range.slice(0,60)+"…":r.range}</small></span>
       <span class="keep">${eqStr}<br><b>${keep.toFixed(0)}%</b> 残存 · 全体 ${pct.toFixed(1)}%</span></div><div class="grid">`;
-    const gres=(st.street===0)?((r.seat===actor&&typeof preflopResolve!=="undefined")?preflopResolve(r.seat):null):((typeof gtoResolve!=="undefined")?gtoResolve(r.seat):null);   /* プリフロ(街0)の決定色は手番の席のみ／コール後は街がフロップに進む=密度表示にして"まだベット前なのにコール色"を防ぐ */
+    const isTurn=(r.seat===actor);   /* この席が今アクションを選べる手番か。手番でない席はアクション内訳を出さない(密度のみ)=プリフロ/ポストフロ/全ライン共通 */
+    const gres=isTurn?((st.street===0)?((typeof preflopResolve!=="undefined")?preflopResolve(r.seat):null):((typeof gtoResolve!=="undefined")?gtoResolve(r.seat):null)):null;
     const gbands=(gres&&gres.pre)?PBAND:ABAND;
-    const faces=board.length>=3 && st.P[r.seat] && (st.bet - st.P[r.seat].inv) > 0.001;   /* この席がベットに直面(受け手)=フォールド/コール/レイズの概算を出す */
+    const faces=isTurn && board.length>=3 && st.P[r.seat] && (st.bet - st.P[r.seat].inv) > 0.001;   /* この席がベットに直面(受け手・かつ手番)=フォールド/コール/レイズの概算を出す */
     for(let x=0;x<13;x++)for(let y=0;y<13;y++){
       const h=label(x,y);
       const reach=Math.min(1,(cell[h]||0)/nCombo(x,y));   // 残コンボ量=塗りの幅
@@ -964,10 +965,10 @@ function drawOut(st){
         }else if(faces){          // ベットを受けた側=フォールド/コール/レイズ(概算・縞)
           var hf=(typeof heurFaceBet!=="undefined")?heurFaceBet(h):null;
           grad=hf?heurFaceGrad(hf):"#2f9e59";
-        }else if(board.length>=3){   // ポストフロップの先手=ベット/チェック(概算・縞)。turn/riverも役の強さで
+        }else if(board.length>=3 && isTurn){   // ポストフロップの先手=ベット/チェック(概算・縞)。手番の席のみ・turn/riverも役の強さで
           var ht=(typeof heurTendency!=="undefined")?heurTendency(h,_hctx):null;
           grad=ht?heurGrad(ht):"#2f9e59";
-        }else{grad="#2f9e59";}     // プリフロでsolved無し=緑(レンジ密度)
+        }else{grad="#2f9e59";}     // 手番でない/プリフロでsolved無し=緑(レンジ密度のみ・アクション内訳は出さない)
         fill=`<div class="cf" style="width:${w}%;background:${grad}"></div>`;
       }
       html+=`<div class="c" data-h="${h}" data-seat="${r.seat}">${fill}<span class="cl">${h}</span></div>`;
@@ -979,7 +980,7 @@ function drawOut(st){
     else if(faces){   // ベットを受けた側=フォールド/コール/レイズ(概算・縞)
       var fb=Object.keys(FBAND).map(function(k){var c=FBAND[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
       html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+fb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️ベットを受けた側の「役の強さによる粗い方針」（縞＝概算・GTOではない）。強い完成手→レイズ寄り／トップペア・強ドロー→コール／エア→フォールド。</div>';}
-    else if(board.length>=3){   // ヒューリスティック凡例(縞・概算・先手/turn/river)
+    else if(board.length>=3 && isTurn){   // ヒューリスティック凡例(縞・概算・先手/turn/river・手番の席のみ)
       var hb=Object.keys(HEURC).map(function(k){var c=HEURC[k];return '<span><i style="background:repeating-linear-gradient(45deg,'+c[0]+' 0 3px,'+c[1]+' 3px 6px)"></i>'+c[2]+'</span>';}).join('');
       var sprNote=(_spr<3)?(' <b style="color:#c98a3a">低SPR('+_spr.toFixed(1)+')補正ON</b>＝膨れたポット(3bet/4bet)。OOPのコーラーはアグレッサーに譲りチェック多め／ドローは含みオッズ薄で撃たない。'):(' SPR≈'+(_spr>=99?'—':_spr.toFixed(1))+'。');
       html+='<div class="gleg"><span class="amt"></span>幅=残コンボ量'+hb+'<span style="color:#c98a3a">≈ヒューリスティック(概算)</span></div><div class="note" style="font-size:10px;margin-top:5px;line-height:1.55;color:#9aa4b2">⚠️これはGTOソルバーの解ではなく「役の強さによる粗い方針」（縞模様＝概算）。バリュー+ドロー→ベット寄り／ミドル・エア→チェック寄り。'+sprNote+'正確な頻度は🗂解ライブラリの盤（solid色）を参照。</div>';}

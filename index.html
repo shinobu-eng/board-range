@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>board-range v5.38 — 概算表示の呼称を「AI回答」に統一</title>
+<title>board-range v5.39 — クリック時ドロー判定を修正(ガット/OESD正確化・BDFDは手2枚スート時のみ)</title>
 <style>
 :root{--ink:#0d1117;--panel:#161b26;--edge:#2a3340;--paper:#e8e6e1;--mute:#8792a3;
  --off:#1b2029;--hot:#e0533c;--act:#f0c14b;--live:#3fb56b;--felt:#123029}
@@ -147,7 +147,7 @@ button.t{padding:10px 11px;font-size:13.5px}
 </head>
 <body>
 
-<h1>board-range v5.38 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
+<h1>board-range v5.39 <span style="color:#3fb56b;font-size:11px">GTO / UI</span></h1>
 <div class="sub">6〜9max・深さ20-200bb／📁GTO解ライブラリで計算済みスポットへ／🎨戦略グリッド／プリフロ・フロップ〜リバーGTO(手法・精度・前提を明示)</div>
 
 <details class="panel det" id="libDet">
@@ -547,8 +547,13 @@ function drawsOf(hole,bd,made){
   if(bd.length>=5)return[];const out=[],allc=[...hole,...bd];
   const sa=new Array(4).fill(0),sb=new Array(4).fill(0);
   for(const c of allc)sa[c&3]++;for(const c of bd)sb[c&3]++;
-  for(let s=0;s<4;s++){if(sa[s]===4&&sb[s]<4)out.push("FD");else if(bd.length===3&&sa[s]===3&&sb[s]<3)out.push("BDFD");}
-  if(made<4){const d=_winCount(allc)-_winCount(bd);if(d>=2)out.push("OESD");else if(d===1)out.push("ガット");}
+  for(let s=0;s<4;s++){if(sa[s]===4&&sb[s]<4)out.push("FD");else if(bd.length===3&&sa[s]===3&&sb[s]===1)out.push("BDFD");}/* BDFD=手が2枚スート(2hole+1board)の時のみ。1枚だけ(1hole+2board)は手のドローでなく盤の性質→除外 */
+  if(made<4){/* 完成させる「ランク数」で数える(窓数ではない): 1ランク=ガット / 2ランク以上=OESD相当(8アウト+)。手を使って完成し盤だけでは完成しない出目のみ数える */
+    const pa=new Array(13).fill(false),pb=new Array(13).fill(false);
+    for(const c of allc)pa[c>>2]=true;for(const c of bd)pb[c>>2]=true;
+    let outs=0;
+    for(let r=0;r<13;r++){if(pa[r])continue;const wa=pa.slice();wa[r]=true;const wb=pb.slice();wb[r]=true;if(_strHigh(wa)>=0&&_strHigh(wb)<0)outs++;}
+    if(outs>=2)out.push("OESD");else if(outs===1)out.push("ガット");}
   return out;
 }
 function roleOf(h1,h2,bd){
